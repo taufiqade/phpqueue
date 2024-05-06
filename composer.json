@@ -1,0 +1,14 @@
+{
+    "name": "adsry/phpqueue",
+    "description": "simple queue wrapper for php 5.6",
+    "autoload": {
+        "psr-4": {
+            "Adsry\\": "src/"
+        }
+    },
+    "require": {
+        "php": "^5.6",
+        "predis/predis": "^1.1",
+        "ramsey/uuid": "^3.9"
+    }
+}
