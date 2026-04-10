@@ -5,23 +5,25 @@ require 'vendor/autoload.php';
 use Adsry\QueueWrapper;
 
 $queue = new QueueWrapper('redis', [
-    'host' => '192.168.18.238',
+    'host' => 'redis',
     'port' => 6379,
 ]);
 
 $context = $queue->createContext();
 
-$queue = $context->createQueue('taufiq');
+$queue = $context->createQueue('queue_test');
 $consumer = $context->createConsumer($queue);
 
 while (true) {
-    sleep(5);
+    $message = null;
     try {
         $message = $consumer->receive();
-        // ...
-        // ...
+        echo "Received: " . $message->getBody() . PHP_EOL;
         $consumer->acknowledge($message);
-    } catch(Exception $e) {
-        $consumer->reject($message, true);
+    } catch (Exception $e) {
+        echo "Error: " . $e->getMessage() . PHP_EOL;
+        if ($message !== null) {
+            $consumer->reject($message, true);
+        }
     }
 }

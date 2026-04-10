@@ -5,13 +5,13 @@ require 'vendor/autoload.php';
 use Adsry\QueueWrapper;
 
 $queue = new QueueWrapper('redis', [
-    'host' => '192.168.18.238',
+    'host' => 'redis',
     'port' => 6379,
 ]);
 
 $context = $queue->createContext();
 
-$queue = $context->createQueue('queue_taufiq');
+$queue = $context->createQueue('queue_test');
 $producer = $context->createProducer();
 
 for ($i = 0; $i < 4; $i++) {

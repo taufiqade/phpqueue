@@ -1,14 +1,28 @@
 {
     "name": "adsry/phpqueue",
     "description": "simple queue wrapper for php 5.6",
+    "type": "library",
     "autoload": {
         "psr-4": {
             "Adsry\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Adsry\\Tests\\": "tests/"
         }
     },
     "require": {
         "php": "^5.6",
         "predis/predis": "^1.1",
         "ramsey/uuid": "^3.9"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.5"
+    },
+    "scripts": {
+        "test": "phpunit",
+        "test:unit": "phpunit --testsuite=Unit",
+        "test:integration": "phpunit --testsuite=Integration"
     }
 }
