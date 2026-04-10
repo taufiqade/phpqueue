@@ -12,9 +12,10 @@ class QueueWrapper
         'redis' => RedisTransporter::class,
     ];
 
-    private $transporter;
+    private $transporterName;
     private $config;
-    
+    private $transporterInstance;
+
     /**
      * @param  string $transporter
      * @param  array  $config
@@ -22,22 +23,26 @@ class QueueWrapper
      */
     public function __construct($transporter, array $config)
     {
-        $this->transporter = $transporter;
+        $this->transporterName = $transporter;
         $this->config = $config;
 
         $this->getTransporter()->connect();
     }
-    
+
     /**
-     * @return Transporter|null
+     * @return Transporter
      */
     private function getTransporter()
     {
-        if (array_key_exists($this->transporter, self::AVAILABLE_TRANSPORTER)) {
-            $transporterClass = self::AVAILABLE_TRANSPORTER[$this->transporter];
-            return new $transporterClass($this->config);
+        if ($this->transporterInstance === null) {
+            if (!array_key_exists($this->transporterName, self::AVAILABLE_TRANSPORTER)) {
+                throw new Exception("No transporter available: {$this->transporterName}");
+            }
+            $transporterClass = self::AVAILABLE_TRANSPORTER[$this->transporterName];
+            $this->transporterInstance = new $transporterClass($this->config);
         }
-        throw new Exception("No transporter available");
+
+        return $this->transporterInstance;
     }
     
     /**
