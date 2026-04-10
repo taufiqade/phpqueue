@@ -14,11 +14,6 @@ trait RedisConsumerHelperTrait
     abstract protected function getContext();
 
     /**
-     * Poll interval between RPOP attempts when the queue is empty (microseconds).
-     */
-    const POLL_INTERVAL_US = 250000; // 250 ms
-
-    /**
      * @param RedisDestination[] $queues
      * @param int                $timeout         in seconds
      * @param int                $redeliveryDelay in seconds
@@ -59,7 +54,7 @@ trait RedisConsumerHelperTrait
                 return null;
             }
 
-            usleep(self::POLL_INTERVAL_US);
+            usleep(250000); // 250 ms
         }
     }
 
@@ -158,16 +153,25 @@ trait RedisConsumerHelperTrait
     }
 
     /**
-     * Atomically pop one message from a queue list and add it to the reserved
-     * sorted set in a single Lua call. This eliminates the window between RPOP
-     * and ZADD where a process crash would lose the message.
+     * Atomically remove a message from the reserved set and push it back onto
+     * the main queue for redelivery in a single Lua call. This eliminates the
+     * window between ZREM and LPUSH where a crash would lose the message.
      *
-     * KEYS[1] - Source queue (list), e.g. my_queue
-     * KEYS[2] - Reserved sorted set, e.g. my_queue:reserved
-     * ARGV[1] - Redelivery-at UNIX timestamp (score)
+     * KEYS[1] - Reserved sorted set, e.g. my_queue:reserved
+     * KEYS[2] - Main queue (list), e.g. my_queue
+     * ARGV[1] - Reserved key (ZSET member) to remove
+     * ARGV[2] - New payload to push onto the main queue
      *
      * @return string
      */
+    public static function atomicAcknowledgeAndRequeue()
+    {
+        return <<<'LUA'
+redis.call('zrem', KEYS[1], ARGV[1])
+redis.call('lpush', KEYS[2], ARGV[2])
+LUA;
+    }
+
     public static function atomicPopAndReserve()
     {
         return <<<'LUA'

@@ -95,20 +95,26 @@ class RedisConsumer implements Consumer
     {
         AssertException::assertInstanceOf($message, RedisMessage::class);
 
-        $this->acknowledge($message);
-
-        if ($requeue) {
-            $message = $this->getContext()->getSerializer()->toMessage($message->getReservedKey());
-            $message->setRedelivered(true);
-
-            if ($message->getTimeToLive()) {
-                $message->setHeader('expires_at', time() + $message->getTimeToLive());
-            }
-
-            $payload = $this->getContext()->getSerializer()->toString($message);
-
-            $this->getRedis()->lpush($this->queue->getName(), $payload);
+        if (!$requeue) {
+            $this->acknowledge($message);
+            return;
         }
+
+        // Build the requeue payload from the live message object (not from the
+        // reserved-key snapshot) so any mutations made before reject() are kept.
+        $message->setRedelivered(true);
+        if ($message->getTimeToLive()) {
+            $message->setHeader('expires_at', time() + $message->getTimeToLive());
+        }
+        $payload = $this->getContext()->getSerializer()->toString($message);
+
+        // Atomically remove from :reserved and push back to the main queue so
+        // a crash between the two operations cannot lose the message.
+        $this->getContext()->getRedis()->evalString(
+            self::atomicAcknowledgeAndRequeue(),
+            [$this->queue->getName() . ':reserved', $this->queue->getName()],
+            [$message->getReservedKey(), $payload]
+        );
     }
     
     /**
