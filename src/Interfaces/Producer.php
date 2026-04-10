@@ -2,9 +2,6 @@
 
 namespace Adsry\Interfaces;
 
-use Adsry\Adapters\Redis\RedisDestination;
-use Adsry\Adapters\Redis\RedisMessage;
-
 interface Producer
 {
     public function send(Destination $destination, Message $message);

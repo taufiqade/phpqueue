@@ -2,6 +2,7 @@
 
 namespace Adsry\Adapters\Redis;
 
+use Adsry\Exceptions\RedisException;
 use Adsry\Interfaces\Redis;
 use Exception;
 use Predis\Client;
@@ -46,7 +47,7 @@ class Predis implements Redis
         try {
             return call_user_func_array([$this->redis, 'eval'], array_merge([$script, count($keys)], $keys, $args));
         } catch (ServerException $e) {
-            throw new ServerException('eval command has failed', 0, $e);
+            throw new RedisException('eval command has failed', 0, $e);
         }
     }
 
@@ -55,7 +56,7 @@ class Predis implements Redis
         try {
             return $this->redis->zadd($key, [$value => $score]);
         } catch (ServerException $e) {
-            throw new ServerException('zadd command has failed', 0, $e);
+            throw new RedisException('zadd command has failed', 0, $e);
         }
     }
 
@@ -64,7 +65,7 @@ class Predis implements Redis
         try {
             return $this->redis->zrem($key, [$value]);
         } catch (ServerException $e) {
-            throw new ServerException('zrem command has failed', 0, $e);
+            throw new RedisException('zrem command has failed', 0, $e);
         }
     }
 
@@ -73,7 +74,7 @@ class Predis implements Redis
         try {
             return $this->redis->lpush($key, [$value]);
         } catch (ServerException $e) {
-            throw new ServerException('lpush command has failed', 0, $e);
+            throw new RedisException('lpush command has failed', 0, $e);
         }
     }
 
@@ -86,7 +87,7 @@ class Predis implements Redis
 
             return null;
         } catch (ServerException $e) {
-            throw new ServerException('brpop command has failed', 0, $e);
+            throw new RedisException('brpop command has failed', 0, $e);
         }
     }
 
@@ -99,7 +100,7 @@ class Predis implements Redis
 
             return null;
         } catch (ServerException $e) {
-            throw new ServerException('rpop command has failed', 0, $e);
+            throw new RedisException('rpop command has failed', 0, $e);
         }
     }
 

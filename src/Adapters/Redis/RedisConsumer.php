@@ -62,10 +62,8 @@ class RedisConsumer implements Consumer
     {
         $timeout = (int) ceil($timeout / 1000);
 
-        echo "start waiting connection ... \n";
         if ($timeout <= 0) {
             while (true) {
-                echo "waiting connection ... \n";
                 if ($message = $this->receive(5000)) {
                     return $message;
                 }

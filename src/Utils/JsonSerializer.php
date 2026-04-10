@@ -44,6 +44,10 @@ class JsonSerializer implements Serializer
             );
         }
 
-        return new RedisMessage($data['body'], $data['properties'], $data['headers']);
+        $body       = isset($data['body'])       ? $data['body']       : '';
+        $properties = isset($data['properties']) ? $data['properties'] : [];
+        $headers    = isset($data['headers'])    ? $data['headers']    : [];
+
+        return new RedisMessage($body, $properties, $headers);
     }
 }

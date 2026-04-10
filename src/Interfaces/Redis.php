@@ -2,7 +2,7 @@
 namespace Adsry\Interfaces;
 
 use Adsry\Adapters\Redis\RedisResult;
-use Predis\Response\ServerException;
+use Adsry\Exceptions\RedisException;
 
 interface Redis
 {
@@ -11,7 +11,7 @@ interface Redis
      * @param array $keys
      * @param array $args
      *
-     * @throws ServerException
+     * @throws RedisException
      *
      * @return mixed
      */
@@ -22,7 +22,7 @@ interface Redis
      * @param $value
      * @param float $score
      *
-     * @throws ServerException
+     * @throws RedisException
      *
      * @return int
      */
@@ -32,7 +32,7 @@ interface Redis
      * @param $key
      * @param $value
      *
-     * @throws ServerException
+     * @throws RedisException
      *
      * @return int
      */
@@ -42,33 +42,14 @@ interface Redis
      * @param $key
      * @param $value
      *
-     * @throws ServerException
+     * @throws RedisException
      *
      * @return int length of the list
      */
     public function lpush($key, $value);
 
     /**
-     * @param string[] $keys
-     * @param int      $timeout in seconds
-     *
-     * @throws ServerException
-     *
-     * @return RedisResult|null
-     */
-    public function brpop(array $keys, $timeout);
-
-    /**
-     * @param $key
-     *
-     * @throws ServerException
-     *
-     * @return RedisResult|null
-     */
-    public function rpop($key);
-
-    /**
-     * @throws ServerException
+     * @throws RedisException
      */
     public function connect();
 
@@ -77,7 +58,7 @@ interface Redis
     /**
      * @param $key
      *
-     * @throws ServerException
+     * @throws RedisException
      */
     public function del($key);
 }
