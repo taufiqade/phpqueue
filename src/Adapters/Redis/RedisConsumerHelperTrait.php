@@ -14,17 +14,19 @@ trait RedisConsumerHelperTrait
     abstract protected function getContext();
 
     /**
+     * Poll interval between RPOP attempts when the queue is empty (microseconds).
+     */
+    const POLL_INTERVAL_US = 250000; // 250 ms
+
+    /**
      * @param RedisDestination[] $queues
-     * @param int                $timeout
-     * @param int                $redeliveryDelay
+     * @param int                $timeout         in seconds
+     * @param int                $redeliveryDelay in seconds
      *
      * @return RedisMessage|null
      */
     protected function receiveMessage(array $queues, $timeout, $redeliveryDelay)
     {
-        $startAt = time();
-        $thisTimeout = $timeout;
-
         if (null === $this->queueNames) {
             $this->queueNames = [];
             foreach ($queues as $queue) {
@@ -32,55 +34,77 @@ trait RedisConsumerHelperTrait
             }
         }
 
-        while ($thisTimeout > 0) {
+        $startAt = time();
+
+        while (true) {
             $this->migrateExpiredMessages($this->queueNames);
 
-            if (false == $result = $this->getContext()->getRedis()->brpop($this->queueNames, $thisTimeout)) {
+            foreach ($this->queueNames as $queueName) {
+                $redeliveryAt = time() + $redeliveryDelay;
+                $raw = $this->getContext()->getRedis()->evalString(
+                    self::atomicPopAndReserve(),
+                    [$queueName, $queueName . ':reserved'],
+                    [$redeliveryAt]
+                );
+
+                if ($raw !== null && $raw !== false) {
+                    $this->pushQueueNameBack($queueName);
+                    if ($message = $this->processResult(new RedisResult($queueName, $raw))) {
+                        return $message;
+                    }
+                }
+            }
+
+            if (time() - $startAt >= $timeout) {
                 return null;
             }
 
-            $this->pushQueueNameBack($result->getKey());
-
-            if ($message = $this->processResult($result, $redeliveryDelay)) {
-                return $message;
-            }
-
-            $thisTimeout -= time() - $startAt;
+            usleep(self::POLL_INTERVAL_US);
         }
-
-        return null;
     }
-    
+
     /**
-     * @param  mixed $destination
-     * @param  mixed $redeliveryDelay
+     * @param  RedisDestination $destination
+     * @param  int              $redeliveryDelay in seconds
      * @return Message|null
      */
     protected function receiveMessageNoWait(RedisDestination $destination, $redeliveryDelay)
     {
-        $this->migrateExpiredMessages([$destination->getName()]);
+        $queueName = $destination->getName();
+        $this->migrateExpiredMessages([$queueName]);
 
-        if ($result = $this->getContext()->getRedis()->rpop($destination->getName())) {
-            return $this->processResult($result, $redeliveryDelay);
+        $redeliveryAt = time() + $redeliveryDelay;
+        $raw = $this->getContext()->getRedis()->evalString(
+            self::atomicPopAndReserve(),
+            [$queueName, $queueName . ':reserved'],
+            [$redeliveryAt]
+        );
+
+        if ($raw !== null && $raw !== false) {
+            return $this->processResult(new RedisResult($queueName, $raw));
         }
 
         return null;
     }
-    
+
     /**
-     * @param  mixed $result
-     * @param  mixed $redeliveryDelay
+     * @param  RedisResult $result
      * @return Message|null
      */
-    protected function processResult(RedisResult $result, $redeliveryDelay)
+    protected function processResult(RedisResult $result)
     {
         $message = $this->getContext()->getSerializer()->toMessage($result->getMessage());
-        // $message = unserialize($result->getMessage());
 
         $now = time();
 
         if (0 === $message->getAttempts() && $expiresAt = $message->getHeader('expires_at')) {
             if ($now > $expiresAt) {
+                // Remove the reservation that was created atomically so the
+                // message does not get migrated back and re-processed forever.
+                $this->getContext()->getRedis()->zrem(
+                    $result->getKey() . ':reserved',
+                    $result->getMessage()
+                );
                 return null;
             }
         }
@@ -88,16 +112,14 @@ trait RedisConsumerHelperTrait
         $message->setHeader('attempts', $message->getAttempts() + 1);
         $message->setRedelivered($message->getAttempts() > 1);
         $message->setKey($result->getKey());
-        $message->setReservedKey($this->getContext()->getSerializer()->toString($message));
 
-        $reservedQueue = $result->getKey().':reserved';
-        $redeliveryAt = $now + $redeliveryDelay;
-
-        $this->getContext()->getRedis()->zadd($reservedQueue, $message->getReservedKey(), $redeliveryAt);
+        // The raw payload is the member stored in the :reserved sorted set by
+        // atomicPopAndReserve(). acknowledge() must ZREM this exact value.
+        $message->setReservedKey($result->getMessage());
 
         return $message;
     }
-    
+
     /**
      * @param  string $queueName
      * @return void
@@ -117,7 +139,7 @@ trait RedisConsumerHelperTrait
         $out = array_splice($this->queueNames, $from, 1);
         array_splice($this->queueNames, $to, 0, $out);
     }
-    
+
     /**
      * @param  array $queueNames
      * @return void
@@ -133,6 +155,29 @@ trait RedisConsumerHelperTrait
             $this->getContext()->getRedis()
                 ->evalString(self::migrateExpired(), [$queueName.':reserved', $queueName], [$now]);
         }
+    }
+
+    /**
+     * Atomically pop one message from a queue list and add it to the reserved
+     * sorted set in a single Lua call. This eliminates the window between RPOP
+     * and ZADD where a process crash would lose the message.
+     *
+     * KEYS[1] - Source queue (list), e.g. my_queue
+     * KEYS[2] - Reserved sorted set, e.g. my_queue:reserved
+     * ARGV[1] - Redelivery-at UNIX timestamp (score)
+     *
+     * @return string
+     */
+    public static function atomicPopAndReserve()
+    {
+        return <<<'LUA'
+local msg = redis.call('rpop', KEYS[1])
+if msg then
+    redis.call('zadd', KEYS[2], ARGV[1], msg)
+    return msg
+end
+return false
+LUA;
     }
 
      /**
